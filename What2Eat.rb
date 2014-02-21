@@ -2,30 +2,53 @@
 require 'gtk2'
 require 'sqlite3'
 
+#############################################
+# add_user_to_local_db(object,object,object)
+#############################################
 def add_user_to_local_db(cb,userAddEntry,emailAddEntry)
-        $con = SQLite3::Database.open "what2eat"
+    $con = SQLite3::Database.open "what2eat"
 	$stm = $con.prepare "SELECT name from USERS where name = '#{userAddEntry.text}'" #prepare sql statement
-        rs = $stm.execute #fire the sql statement
-        row = rs.next
+    rs = $stm.execute #fire the sql statement
+    row = rs.next
 	$stm.close
-	if row[0] == userAddEntry.text
-	puts "ALREADY EXISTS"
-	$con.close
-	#BAD! RETURN
-	return
-	end
-
-        $con.execute "INSERT INTO USERS(name,email) VALUES ('#{userAddEntry.text}','#{emailAddEntry.text}')"
-        cb.append_text(userAddEntry.text)
-        userAddEntry.text = ""
-        emailAddEntry.text = ""
-        $con.close
+	
+	if row.nil?
+	$con.execute "INSERT INTO USERS(name,email) VALUES ('#{userAddEntry.text}','#{emailAddEntry.text}')"
+    cb.append_text(userAddEntry.text)
+    userAddEntry.text = ""
+    emailAddEntry.text = ""
+    $con.close
+	else
+		puts "ALREADY EXISTS"
+		$con.close
+		#BAD! RETURN
+		return
+    end
+end
+#############################################
+# populate_user_select_cb(object)
+#############################################
+def populate_user_select_cb(cb)
+	$con = SQLite3::Database.open "what2eat"
+    $stm = $con.prepare "SELECT * from USERS" #prepare sql statement
+    $rs = $stm.execute #fire the sql statement
+    $rs.each do |row|
+		cb.append_text(row[1]) #add to combobox
+    end
+    $stm.close #close sql statement
+    $con.close
+    cb.set_active(0)
 end
 
-def populate_user_select_cb(cb)
-	##Fill in the user select combo box from DB##########
+#############################################
+# populate_food_select(object)
+# Thoughts: Currently Looks at everyfood
+# for every user. May want to put it to 
+# only foods for current user
+#############################################
+def populate_food_select_cb(cb)
 	$con = SQLite3::Database.open "what2eat"
-	$stm = $con.prepare "SELECT * from USERS" #prepare sql statement
+	$stm = $con.prepare "SELECT * from FOODS" #prepare sql statement
 	$rs = $stm.execute #fire the sql statement
 	$rs.each do |row|
 	        cb.append_text(row[1]) #add to combobox
@@ -35,52 +58,107 @@ def populate_user_select_cb(cb)
 	cb.set_active(0)
 end
 
-###THIS IS DEBUG. I AM HOPING THIS NEVER ACTUALLY FIRES###
-###I think GTK is auto parsing spaces as null ############
-def isJustSpace(passed)
-	puts passed.text.length.to_s
-	test_string = passed.text.gsub(/\s+/, "")
-	if test_string.length == 0
-		puts "length 0 detected"
-		return true
-	else
-		puts "length >0 detected"
-		return false
-	end
-end
-##############################################################
-
-###############GET EMAIL OF A USER################################
+#############################################
+# get_email(string)
+#############################################
 def get_email(user_name)
 	$con = SQLite3::Database.open "what2eat"
-        $stm = $con.prepare "SELECT email from USERS where name = '#{user_name}'" #prepare sql statement
-        rs = $stm.execute #fire the sql statement
+	$stm = $con.prepare "SELECT email from USERS where name = '#{user_name}'" #prepare sql statement
+    rs = $stm.execute #fire the sql statement
 	row = rs.next
-        $stm.close #close sql statement
-        $con.close
+    $stm.close #close sql statement
+    $con.close
 	return row[0]
 end
-##################################################################
 
-############UPDATE THE DISPLAYED EMAIL FIELD######################
+#############################################
+# get_user_id(string)
+#############################################
+def get_user_id(user_name)
+	$con = SQLite3::Database.open "what2eat"
+    $stm = $con.prepare "SELECT user_id from USERS where name = '#{user_name}'" #prepare sql statement
+    rs = $stm.execute #fire the sql statement
+    row = rs.next
+    $stm.close #close sql statement
+    $con.close
+    return row[0]
+end
+
+#############################################
+# get_food_id(string)
+#############################################
+def get_food_id(food_name)
+        $con = SQLite3::Database.open "what2eat"
+        $stm = $con.prepare "SELECT food_id from FOODS where food_name = '#{food_name}'" #prepare sql statement
+        rs = $stm.execute #fire the sql statement
+        row = rs.next
+        $stm.close #close sql statement
+        $con.close
+        return row[0]
+end
+#############################################
+# add_food_to_local_db(string, integer, integer)
+# UPDATE STATEMENT IF EXISTS
+#
+#############################################
+def add_food_to_local_db(food_name,user_id,rating)
+	$con = SQLite3::Database.open "what2eat"
+    $stm = $con.prepare "SELECT food_name from FOODS where food_name = '#{food_name}'" #prepare sql statement
+    rs = $stm.execute #fire the sql statement
+    row = rs.next
+    $stm.close
+	if row.nil? #brand new
+		$con.execute "INSERT INTO FOODS(food_name) VALUES ('#{food_name}')"
+		$con.execute "INSERT INTO USERS_FOODS(user_id,food_id,rating) VALUES (#{user_id},#{get_food_id(food_name).to_i},#{rating})"
+		$con.close
+		return true
+	else #It exists in the foods table
+		
+	    puts "ALREADY EXISTS"
+		$stm = $con.prepare "SELECT user_food_id from USERS_FOODS where food_id = #{get_food_id(food_name).to_i} AND user_id = #{user_id}" #prepare sql statement
+		rs = $stm.execute #fire the sql statement
+		row = rs.next
+		$stm.close
+		if row.nil? #brand new
+		$con.execute "INSERT INTO USERS_FOODS(user_id,food_id,rating) VALUES (#{user_id},#{get_food_id(food_name).to_i},#{rating})"
+		else
+		$con.execute "UPDATE USERS_FOODS SET rating = #{rating} WHERE user_id = #{user_id} and food_id = #{get_food_id(food_name).to_i}"
+				#update  Author='Lev Nikolayevich Tolstoy' WHERE Id=1;
+		end
+		$con.close
+		#NEED TO CHECK IF USER_FOODS exists already
+		return false
+	end
+        
+end      
+
+#############################################
+# update_email(string,string)
+#############################################
 def update_email(user_name,email)
 	$con = SQLite3::Database.open "what2eat"
         $con.execute "UPDATE USERS SET email= '#{email}' WHERE name = '#{user_name}' "
 	$con.close
 end
-##################Get Which Field To Choose#################
-def GetFoodSelect(newText,cbText)
-	if newText.length == 0 && cbText.length == 0
-		return "nothing"
-	elsif newText.length == 0
-		return cbText
-	else
-		return newText
+#############################################
+# GetFoodSelect(object,object,integer,integer)
+#############################################
+def GetFoodSelect(entry_food_new,cb_food,user_id,rating)
+	if entry_food_new.text.length == 0 && cb_food.active_text.length == 0
+		return 0
+	elsif entry_food_new.text.length == 0 #if its an existing food
+		add_food_to_local_db(cb_food.active_text,user_id,rating)
+	else #if its a new food
+		if add_food_to_local_db(entry_food_new.text,user_id,rating)
+			cb_food.append_text(entry_food_new.text)
+			entry_food_new.text = ""
+		end	
 	end
-
 end
 
-####################################################################
+#############################################
+# select_user_window(string)
+#############################################
 def select_user_window(user_name)
 	$user_window = Gtk::Window.new(Gtk::Window::TOPLEVEL)
 	$user_window_table = Gtk::Table.new(9,2,false)
@@ -108,13 +186,11 @@ def select_user_window(user_name)
 	$label_new_food = Gtk::Label.new("Enter New Food")
 	$label_rate_it = Gtk::Label.new("Rate It!")
 	$label_existing = Gtk::Label.new("Existing Food")
-	$cb_food.append_text("Cheeseburger")
-	$cb_food.append_text("Cake")
+	populate_food_select_cb($cb_food)
 	$cb_food.set_active(0)
 	$button_food_quit.signal_connect("clicked") {$user_window.destroy}
 	$button_food_new_love.signal_connect("clicked") {
-		$value = GetFoodSelect($entry_food_new.text,$cb_food.active_text)
-		puts $value #this is what will be pushed to the sqlite
+	GetFoodSelect($entry_food_new,$cb_food,get_user_id(user_name).to_i,3)
 	}
 	$user_window_table.attach($show_name,0,2,0,1)
 	$user_window_table.attach($email_update_field,0,1,1,2)
@@ -136,8 +212,12 @@ def select_user_window(user_name)
 	$user_window.add($user_window_table)
 	$user_window.show_all
 end
-##################################################
 
+
+#############################################
+# another_tab
+# Notes: Just a debug
+#############################################
 
 def another_tab; puts "Switching"; end
 
@@ -185,8 +265,6 @@ button_option.signal_connect("clicked"){puts "TBI GO TO OPTIONS PAGE"}
 $buttonAddNewUser.signal_connect("clicked"){
 	if $userAddEntry.text.length == 0
 		puts "DEBUG: Nothing was entered"
-	elsif isJustSpace($userAddEntry) #I THINK THIS IS REDUNDANT
-		$userAddEntry.text = "" #text.length seems to discount all spaced
 	else
 		add_user_to_local_db($cb,$userAddEntry,$emailAddEntry)
 	end
