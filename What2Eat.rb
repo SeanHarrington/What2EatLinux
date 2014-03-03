@@ -2,6 +2,67 @@
 require 'gtk2'
 require 'sqlite3'
 
+
+
+
+def about_box()
+		about = Gtk::AboutDialog.new
+        about.set_program_name "What2Eat"
+        about.set_version "0.1"
+        about.set_copyright "(c) Sean Harrington"
+        about.set_comments "A Simple Tool To Track Eating Habits"
+        about.set_website "https://github.com/SeanHarrington/What2EatLinux"
+        #about.set_logo Gdk::Pixbuf.new "battery.png"
+        about.run
+        about.destroy
+end
+#############################################
+# confirmation_box(string)
+# Generic Popup Box with passed message 
+# and OK button
+#############################################
+def confirmation_box(message)
+# Create the dialog
+	md = Gtk::Dialog.new(
+		"System Message",
+		$main_application_window,
+		Gtk::Dialog::DESTROY_WITH_PARENT,
+		[ Gtk::Stock::OK, Gtk::Dialog::RESPONSE_NONE ]
+	)
+    add_message = Gtk::Label.new(message)
+    md.vbox.pack_start(add_message)
+    add_message.show
+    md.run
+    md.destroy
+end
+
+def temp_report()
+	$con = SQLite3::Database.open "what2eat"
+    $stm = $con.prepare "SELECT * from USERS" #prepare sql statement
+    $rs = $stm.execute #fire the sql statement
+    $rs.each do |row|
+		puts row[1] +" "+ row[2] #add to combobox
+    end
+    $stm.close #close sql statement
+    
+    $stm = $con.prepare "SELECT * from FOODS" #prepare sql statement
+    $rs = $stm.execute #fire the sql statement
+    $rs.each do |row|
+		puts row[1] #add to combobox
+    end
+    $stm.close #close sql statement
+    
+    $stm = $con.prepare "SELECT * from USERS_FOODS" #prepare sql statement
+    $rs = $stm.execute #fire the sql statement
+    $rs.each do |row|
+		puts row[1] #add to combobox
+    end
+    $stm.close #close sql statement
+       
+    
+    $con.close
+end
+
 #############################################
 # add_user_to_local_db(object,object,object)
 #############################################
@@ -88,7 +149,9 @@ end
 # get_food_id(string)
 #############################################
 def get_food_id(food_name)
+
         $con = SQLite3::Database.open "what2eat"
+        
         $stm = $con.prepare "SELECT food_id from FOODS where food_name = '#{food_name}'" #prepare sql statement
         rs = $stm.execute #fire the sql statement
         row = rs.next
@@ -102,34 +165,47 @@ end
 #
 #############################################
 def add_food_to_local_db(food_name,user_id,rating)
+	
+	
+	
 	$con = SQLite3::Database.open "what2eat"
     $stm = $con.prepare "SELECT food_name from FOODS where food_name = '#{food_name}'" #prepare sql statement
     rs = $stm.execute #fire the sql statement
     row = rs.next
     $stm.close
+    $con.close
+    
 	if row.nil? #brand new
-		$con.execute "INSERT INTO FOODS(food_name) VALUES ('#{food_name}')"
-		$con.execute "INSERT INTO USERS_FOODS(user_id,food_id,rating) VALUES (#{user_id},#{get_food_id(food_name).to_i},#{rating})"
-		$con.close
-		return true
+	$con = SQLite3::Database.open "what2eat"
+    $con.execute "INSERT INTO FOODS(food_name) VALUES ('#{food_name}')"
+	$con.close
+	food_id = get_food_id(food_name).to_i
+    $con = SQLite3::Database.open "what2eat"	
+	$con.execute "INSERT INTO USERS_FOODS(user_id,food_id,rating) VALUES (#{user_id},#{food_id},#{rating})"
+	$con.close
+	return true
+	
 	else #It exists in the foods table
-		
-	    puts "ALREADY EXISTS"
-		$stm = $con.prepare "SELECT user_food_id from USERS_FOODS where food_id = #{get_food_id(food_name).to_i} AND user_id = #{user_id}" #prepare sql statement
+	
+	food_id = get_food_id(food_name).to_i
+    $con = SQLite3::Database.open "what2eat"
+    
+	
+	
+		$stm = $con.prepare "SELECT user_food_id from USERS_FOODS where food_id = #{food_id} AND user_id = #{user_id}" #prepare sql statement
 		rs = $stm.execute #fire the sql statement
 		row = rs.next
 		$stm.close
 		if row.nil? #brand new
-		$con.execute "INSERT INTO USERS_FOODS(user_id,food_id,rating) VALUES (#{user_id},#{get_food_id(food_name).to_i},#{rating})"
+		$con.execute "INSERT INTO USERS_FOODS(user_id,food_id,rating) VALUES (#{user_id},#{food_id},#{rating})"
 		else
-		$con.execute "UPDATE USERS_FOODS SET rating = #{rating} WHERE user_id = #{user_id} and food_id = #{get_food_id(food_name).to_i}"
+		$con.execute "UPDATE USERS_FOODS SET rating = #{rating} WHERE user_id = #{user_id} and food_id = #{food_id}"
 				#update  Author='Lev Nikolayevich Tolstoy' WHERE Id=1;
 		end
 		$con.close
 		#NEED TO CHECK IF USER_FOODS exists already
 		return false
 	end
-        
 end      
 
 #############################################
@@ -139,6 +215,7 @@ def update_email(user_name,email)
 	$con = SQLite3::Database.open "what2eat"
         $con.execute "UPDATE USERS SET email= '#{email}' WHERE name = '#{user_name}' "
 	$con.close
+	
 end
 #############################################
 # GetFoodSelect(object,object,integer,integer)
@@ -171,7 +248,8 @@ def select_user_window(user_name)
 	$email_update_field = Gtk::Entry.new
 	$email_update_button = Gtk::Button.new("Update")
 	$email_update_button.signal_connect("clicked") {
-		update_email(user_name,$email_update_field.text)     
+		update_email(user_name,$email_update_field.text)  
+		confirmation_box("Email Updated")   
 	}
 	$email_update_field.text = get_email(user_name)
 	$entry_food_new = Gtk::Entry.new
@@ -188,9 +266,22 @@ def select_user_window(user_name)
 	$label_existing = Gtk::Label.new("Existing Food")
 	populate_food_select_cb($cb_food)
 	$cb_food.set_active(0)
-	$button_food_quit.signal_connect("clicked") {$user_window.destroy}
+	
+	$button_food_quit.signal_connect("clicked") {
+	$user_window.destroy
+	}
+	
 	$button_food_new_love.signal_connect("clicked") {
 	GetFoodSelect($entry_food_new,$cb_food,get_user_id(user_name).to_i,3)
+	confirmation_box("Rating Set(Love It)") 
+	}
+	$button_food_new_ok.signal_connect("clicked") {
+	GetFoodSelect($entry_food_new,$cb_food,get_user_id(user_name).to_i,2)
+	confirmation_box("Rating Set(It's Ok)") 
+	}
+	$button_food_new_hate.signal_connect("clicked") {
+	GetFoodSelect($entry_food_new,$cb_food,get_user_id(user_name).to_i,1)
+	confirmation_box("Rating Set(Hate It)") 
 	}
 	$user_window_table.attach($show_name,0,2,0,1)
 	$user_window_table.attach($email_update_field,0,1,1,2)
@@ -218,7 +309,6 @@ end
 # another_tab
 # Notes: Just a debug
 #############################################
-
 def another_tab; puts "Switching"; end
 
 window = Gtk::Window.new(Gtk::Window::TOPLEVEL)
@@ -257,16 +347,19 @@ $fixed = Gtk::Fixed.new
 
 #########DEFINE BUTTONS##############################
 $buttonQuit.signal_connect("clicked"){Gtk.main_quit} #quits
-button_report.signal_connect("clicked") {puts "TBI GO TO REPORTS PAGE"} #Temp
+button_report.signal_connect("clicked") {temp_report} #Temp
 button_update.signal_connect( "clicked" ) {puts "TBI UPLOAD/DOWNLOAD FROM REMOTE"} #temp
 $nbMain.signal_connect('change-current-page') {	another_tab}
 $buttonAddSelect.signal_connect("clicked") {select_user_window($cb.active_text)}
-button_option.signal_connect("clicked"){puts "TBI GO TO OPTIONS PAGE"}
+button_option.signal_connect("clicked"){puts "TBI GO TO OPTIONS PAGE"
+about_box()
+}
 $buttonAddNewUser.signal_connect("clicked"){
 	if $userAddEntry.text.length == 0
 		puts "DEBUG: Nothing was entered"
 	else
 		add_user_to_local_db($cb,$userAddEntry,$emailAddEntry)
+		confirmation_box("New Person Successfuly Added") 
 	end
 }
 ########################################################
