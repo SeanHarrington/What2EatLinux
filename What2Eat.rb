@@ -49,7 +49,7 @@ def createReportFood(food_name)
 
 	$con = SQLite3::Database.open "what2eat"
 	
-	$stm = $con.prepare "SELECT USERS.name, USERS_FOODS.rating from USERS, FOODS, USERS_FOODS WHERE FOODS.food_name = '#{get_sanitized_string(food_name.downcase)}' AND USERS_FOODS.food_id = FOODS.food_id AND USERS_FOODS.user_id = USERS.user_id ORDER BY USERS_FOODS.rating DESC" 
+	$stm = $con.prepare "SELECT USERS.name, USERS_FOODS.rating from USERS, FOODS, USERS_FOODS WHERE FOODS.food_name = '#{get_sanitized_string(food_name.downcase)}' AND USERS_FOODS.food_id = FOODS.food_id AND USERS_FOODS.user_id = USERS.user_id ORDER BY USERS_FOODS.rating DESC, USERS.name ASC" 
 	$rs = $stm.execute #fire the sql statement
 		$rs.each do |row|
 		$data1 = $data1 + titleize(row[0]) + "\n"
@@ -84,7 +84,7 @@ def createReportUser(user_name)
 
 	user_number = get_user_id(user_name)
 	$reportBox = Gtk::Window.new(Gtk::Window::TOPLEVEL)
-	$reportBox.set_title "USER REPORTS"
+	$reportBox.set_title titleize(user_name)
 	$reportBox.border_width = 10
 	$reportBox.resizable=(false)
 	$reportBox.modal=(true)
@@ -94,7 +94,7 @@ $data1 = ""
 $data2 = ""
 
 	$con = SQLite3::Database.open "what2eat"
-	$stm = $con.prepare "SELECT FOODS.food_name, USERS_FOODS.rating from FOODS, USERS_FOODS WHERE USERS_FOODS.food_id = FOODS.food_id AND USERS_FOODS.user_id = #{user_number} ORDER BY USERS_FOODS.rating DESC" 
+	$stm = $con.prepare "SELECT FOODS.food_name, USERS_FOODS.rating from FOODS, USERS_FOODS WHERE USERS_FOODS.food_id = FOODS.food_id AND USERS_FOODS.user_id = #{user_number} ORDER BY USERS_FOODS.rating DESC, FOODS.food_name ASC" 
 	$rs = $stm.execute #fire the sql statement
 		$rs.each do |row|
 		$data1 = $data1 + titleize(row[0]) + "\n"
@@ -179,12 +179,14 @@ def populate_user_select_cb(cb)
 	$con = SQLite3::Database.open "what2eat"
     $stm = $con.prepare "SELECT * from USERS ORDER BY name" #prepare sql statement
     $rs = $stm.execute #fire the sql statement
+    count = 0
     $rs.each do |row|
 		cb.append_text(titleize(row[1])) #add to combobox
+		count = count + 1
     end
     $stm.close #close sql statement
     $con.close
-    cb.set_active(0)
+    cb.set_active(count/2)
 end
 
 #############################################
@@ -196,12 +198,14 @@ def populateFoodReportComboBox(cb)
 $con = SQLite3::Database.open "what2eat"
     $stm = $con.prepare "SELECT * from FOODS ORDER BY food_name" #prepare sql statement
     $rs = $stm.execute #fire the sql statement
+    count = 0
     $rs.each do |row|
 		cb.append_text(titleize(row[1])) #add to combobox
+		count = count + 1
     end
     $stm.close #close sql statement
     $con.close
-    cb.set_active(0)
+    cb.set_active(count/2)
 end
 
 #############################################
@@ -217,15 +221,17 @@ def populate_food_select_cb(cb,user_number)
 	$rs = $stm.execute #fire the sql statement
 	#puts $rs.nil?
 	#puts $rs.count
+	count = 0
 		$rs.each do |row|
 			#puts row
 		    cb.append_text(titleize(row[0])) #add to combobox
+		    count = count + 1
 	    end
 	  
 	$stm.close #close sql statement
 	$con.close
 	
-	cb.set_active(0)
+	cb.set_active(count/2)
 end
 
 #############################################
@@ -434,7 +440,7 @@ def select_user_window(user_name)
 	$label_existing = Gtk::Label.new("Existing Food")
 	#populate_food_select_cb($cb_food,get_user_id(user_name).to_i)
 	populateFoodReportComboBox($cb_food)
-	$cb_food.set_active(0)
+	
 
 	$buttonUserEmailUpdate.signal_connect("clicked") {
 		update_email(user_name.downcase,$email_update_field.text.downcase)
