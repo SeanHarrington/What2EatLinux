@@ -1,55 +1,26 @@
 #!/usr/bin/env rubyT
 require 'gtk2'
 require 'sqlite3'
-
-
 #############################################
-# print_report(integer,anything,anything)
-# early reports debug
+#What2Eat?                                  #
+#By Sean Harrington                         #
+#Project Start Date: Feb-7-2014             #
 #############################################
-def print_report(report_num,passed_1,passed_2)
 
-	$con = SQLite3::Database.open "what2eat"
-	if report_num == 1
 
-    $stm = $con.prepare "SELECT * from USERS" #prepare sql statement
-    $rs = $stm.execute #fire the sql statement
-    $rs.each do |row|
-		puts row[1] +" "+ row[2] #add to combobox
-    end
-    $stm.close #close sql statement
-
-	elsif report_num == 2
-
-	$stm = $con.prepare "SELECT FOODS.food_name, USERS_FOODS.rating FROM USERS, FOODS, USERS_FOODS WHERE USERS.user_id = USERS_FOODS.user_id AND USERS_FOODS.food_id = FOODS.food_id AND USERS.name = '#{passed_1}' ORDER BY FOODS.food_name" #prepare sql statement
-    $rs = $stm.execute #fire the sql statement
-    $rs.each do |row|
-		rated = row[1]
-		if rated == 1
-		rated = "Hate it"
-		elsif rated == 2
-		rated = "It's Ok"
-		elsif rated == 3
-		rated = "Love It"
-		else
-		rated = "NONE"
-		end
-		puts row[0] + ", " + rated
-		#puts row[0] + ", " + row[1]#add to combobox
-    end
-    $stm.close #close sql statement
-
-	elsif report_num == 3
-
-	else
-	puts "unknown report number"
-	end
-
-	$con.close
-
+def get_sanitized_string(v)
+  return v.to_s.gsub(/\\/, '\&\&').gsub(/'/, "''")
 end
 
-def about_box()
+def titleize(str)
+  str.split(" ").map(&:capitalize).join(" ")
+end
+
+#############################################
+# aboutBox()
+# Default standard about INFO
+#############################################
+def aboutBox()
 		about = Gtk::AboutDialog.new
         about.set_program_name "What2Eat"
         about.set_version "0.1"
@@ -61,7 +32,54 @@ def about_box()
         about.destroy
 end
 
+#############################################
+# createReportFood(string)
+# this report lists who likes a food
+#############################################
+def createReportFood(food_name)
+	$reportBox = Gtk::Window.new(Gtk::Window::TOPLEVEL)
+	$reportBox.set_title titleize(food_name)
+	$reportBox.border_width = 10
+	$reportBox.resizable=(false)
+	$reportBox.modal=(true)
+	$reportBox.set_size_request(300,-1)
+	$reportBoxTable = Gtk::Table.new(1,2,false) 
+	$data1 = ""
+	$data2 = ""
 
+	$con = SQLite3::Database.open "what2eat"
+	
+	$stm = $con.prepare "SELECT USERS.name, USERS_FOODS.rating from USERS, FOODS, USERS_FOODS WHERE FOODS.food_name = '#{get_sanitized_string(food_name.downcase)}' AND USERS_FOODS.food_id = FOODS.food_id AND USERS_FOODS.user_id = USERS.user_id ORDER BY USERS_FOODS.rating DESC" 
+	$rs = $stm.execute #fire the sql statement
+		$rs.each do |row|
+		$data1 = $data1 + titleize(row[0]) + "\n"
+		temp_string = ""
+		if row[1] == 3
+			temp_string = "Loves It"
+		elsif row[1] == 2
+			temp_string = "It's OK"
+		else
+			temp_string = "Hates It"
+		end
+		$data2 = $data2 + temp_string + "\n"
+	  end
+	$stm.close #close sql statement
+	$con.close
+	$labelReportBox1 = Gtk::Label.new $data1
+	$labelReportBox2 = Gtk::Label.new $data2
+    $reportBoxTable.attach($labelReportBox1,0,1,0,1)
+    $reportBoxTable.attach($labelReportBox2,1,2,0,1)
+    
+    $reportBox.add($reportBoxTable)
+	
+	$reportBox.show_all
+	
+end
+
+#############################################
+# createReportUser(string)
+# this report lists all of a single user's preferences
+#############################################
 def createReportUser(user_name)
 
 	user_number = get_user_id(user_name)
@@ -76,11 +94,10 @@ $data1 = ""
 $data2 = ""
 
 	$con = SQLite3::Database.open "what2eat"
-	#SELECT FOODS.food_name from FOODS, USERS_FOODS WHERE USERS_FOODS.food_id = FOODS.food_id AND USERS_FOODS.user_id = #{user-number}
-	$stm = $con.prepare "SELECT FOODS.food_name, USERS_FOODS.rating from FOODS, USERS_FOODS WHERE USERS_FOODS.food_id = FOODS.food_id AND USERS_FOODS.user_id = #{user_number}" 
+	$stm = $con.prepare "SELECT FOODS.food_name, USERS_FOODS.rating from FOODS, USERS_FOODS WHERE USERS_FOODS.food_id = FOODS.food_id AND USERS_FOODS.user_id = #{user_number} ORDER BY USERS_FOODS.rating DESC" 
 	$rs = $stm.execute #fire the sql statement
 		$rs.each do |row|
-		$data1 = $data1 + row[0] + "\n"
+		$data1 = $data1 + titleize(row[0]) + "\n"
 		temp_string = ""
 		if row[1] == 3
 			temp_string = "Loves It"
@@ -111,13 +128,12 @@ $data2 = ""
 	
 end
 
-
 #############################################
-# confirmation_box(string)
+# confirmationBox(string)
 # Generic Popup Box with passed message
 # and OK button
 #############################################
-def confirmation_box(message)
+def confirmationBox(message)
 # Create the dialog
 	md = Gtk::Dialog.new(
 		"System Message",
@@ -133,18 +149,18 @@ def confirmation_box(message)
 end
 
 #############################################
-# add_user_to_local_db(object,object,object)
+# addUserToLocalDB(object,object,object)
 #############################################
-def add_user_to_local_db(cb,userAddEntry,emailAddEntry)
+def addUserToLocalDB(cb,userAddEntry,emailAddEntry)
     $con = SQLite3::Database.open "what2eat"
-	$stm = $con.prepare "SELECT name from USERS where name = '#{userAddEntry.text}'" #prepare sql statement
+	$stm = $con.prepare "SELECT name from USERS where name = '#{userAddEntry.text.downcase}'" #prepare sql statement
     rs = $stm.execute #fire the sql statement
     row = rs.next
 	$stm.close
 
 	if row.nil?
-	$con.execute "INSERT INTO USERS(name,email) VALUES ('#{userAddEntry.text}','#{emailAddEntry.text}')"
-    cb.append_text(userAddEntry.text)
+	$con.execute "INSERT INTO USERS(name,email) VALUES ('#{get_sanitized_string(userAddEntry.text.downcase)}','#{get_sanitized_string(emailAddEntry.text.downcase)}')"
+    cb.append_text(titleize(userAddEntry.text))
     userAddEntry.text = ""
     emailAddEntry.text = ""
     $con.close
@@ -164,19 +180,24 @@ def populate_user_select_cb(cb)
     $stm = $con.prepare "SELECT * from USERS ORDER BY name" #prepare sql statement
     $rs = $stm.execute #fire the sql statement
     $rs.each do |row|
-		cb.append_text(row[1]) #add to combobox
+		cb.append_text(titleize(row[1])) #add to combobox
     end
     $stm.close #close sql statement
     $con.close
     cb.set_active(0)
 end
 
+#############################################
+# populateFoodReportComboBox(object)
+# fills the food selection box with all known 
+# foods in local DB
+#############################################
 def populateFoodReportComboBox(cb)
 $con = SQLite3::Database.open "what2eat"
     $stm = $con.prepare "SELECT * from FOODS ORDER BY food_name" #prepare sql statement
     $rs = $stm.execute #fire the sql statement
     $rs.each do |row|
-		cb.append_text(row[1]) #add to combobox
+		cb.append_text(titleize(row[1])) #add to combobox
     end
     $stm.close #close sql statement
     $con.close
@@ -198,7 +219,7 @@ def populate_food_select_cb(cb,user_number)
 	#puts $rs.count
 		$rs.each do |row|
 			#puts row
-		    cb.append_text(row[0]) #add to combobox
+		    cb.append_text(titleize(row[0])) #add to combobox
 	    end
 	  
 	$stm.close #close sql statement
@@ -240,7 +261,7 @@ def get_food_id(food_name)
 
         $con = SQLite3::Database.open "what2eat"
 
-        $stm = $con.prepare "SELECT food_id from FOODS where food_name = '#{food_name}'" #prepare sql statement
+        $stm = $con.prepare "SELECT food_id from FOODS where food_name = '#{get_sanitized_string(food_name.downcase)}'" #prepare sql statement
         rs = $stm.execute #fire the sql statement
         row = rs.next
         $stm.close #close sql statement
@@ -253,10 +274,8 @@ end
 #############################################
 def add_food_to_local_db(food_name,user_id,rating)
 
-
-
 	$con = SQLite3::Database.open "what2eat"
-    $stm = $con.prepare "SELECT food_name from FOODS where food_name = '#{food_name}'" #prepare sql statement
+    $stm = $con.prepare "SELECT food_name from FOODS where food_name = '#{get_sanitized_string(food_name.downcase)}'" #prepare sql statement
     rs = $stm.execute #fire the sql statement
     row = rs.next
     $stm.close
@@ -264,7 +283,7 @@ def add_food_to_local_db(food_name,user_id,rating)
 
 	if row.nil? #brand new
 	$con = SQLite3::Database.open "what2eat"
-    $con.execute "INSERT INTO FOODS(food_name) VALUES ('#{food_name}')"
+    $con.execute "INSERT INTO FOODS(food_name) VALUES ('#{get_sanitized_string(food_name.downcase)}')"
 	$con.close
 	food_id = get_food_id(food_name).to_i
     $con = SQLite3::Database.open "what2eat"
@@ -287,10 +306,10 @@ def add_food_to_local_db(food_name,user_id,rating)
 		$con.execute "INSERT INTO USERS_FOODS(user_id,food_id,rating) VALUES (#{user_id},#{food_id},#{rating})"
 		else
 		$con.execute "UPDATE USERS_FOODS SET rating = #{rating} WHERE user_id = #{user_id} and food_id = #{food_id}"
-				#update  Author='Lev Nikolayevich Tolstoy' WHERE Id=1;
+			
 		end
 		$con.close
-		#NEED TO CHECK IF USER_FOODS exists already
+		
 		return false
 	end
 end
@@ -300,7 +319,7 @@ end
 #############################################
 def update_email(user_name,email)
 	$con = SQLite3::Database.open "what2eat"
-        $con.execute "UPDATE USERS SET email= '#{email}' WHERE name = '#{user_name}' "
+        $con.execute "UPDATE USERS SET email= '#{get_sanitized_string(email.downcase)}' WHERE name = '#{user_name}' "
 	$con.close
 
 end
@@ -311,16 +330,20 @@ def GetFoodSelect(entry_food_new,cb_food,user_id,rating)
 	if entry_food_new.text.length == 0 && cb_food.active_text.length == 0
 		return 0
 	elsif entry_food_new.text.length == 0 #if its an existing food
-		add_food_to_local_db(cb_food.active_text,user_id,rating)
+		add_food_to_local_db(cb_food.active_text.downcase,user_id,rating)
 	else #if its a new food
-		if add_food_to_local_db(entry_food_new.text,user_id,rating)
-			cb_food.append_text(entry_food_new.text)
+		if add_food_to_local_db(entry_food_new.text.downcase,user_id,rating)
+			cb_food.append_text(titleize(entry_food_new.text))
 			entry_food_new.text = ""
 		end
 	end
 end
 
-
+#############################################
+# userReport()
+# creates a window to select user for report. 
+# later will move into tabs
+#############################################
 def userReport()
 	$windowReportUser = Gtk::Window.new(Gtk::Window::TOPLEVEL)
 	$windowReportUser.set_title "USER REPORTS"
@@ -344,10 +367,15 @@ def userReport()
 
 	populate_user_select_cb($cbReportUser)
 	
-	$buttonReportUser.signal_connect("clicked") {createReportUser($cbReportUser.active_text)}
+	$buttonReportUser.signal_connect("clicked") {createReportUser($cbReportUser.active_text.downcase)}
 
 end
 
+#############################################
+# foodReport()
+# creates a window to select food for report. 
+# later will move into tabs
+#############################################
 def foodReport()
 	$windowReportFood = Gtk::Window.new(Gtk::Window::TOPLEVEL)
 	$windowReportFood.set_title "FOOD REPORTS"
@@ -356,18 +384,23 @@ def foodReport()
 	$windowReportFood.modal=(true)
 	$windowReportFood.set_size_request(300,-1)
 
-	$tableReportFood = Gtk::Table.new(2,2,false)
+	$tableReportFood = Gtk::Table.new(3,2,false)
 
 	$cbReportFood = Gtk::ComboBox.new
 	$labelReportFood = Gtk::Label.new("Select Food")
+	$buttonReportFood = Gtk::Button.new("Select")
 	
 	$tableReportFood.attach($labelReportFood,0,1,0,1)
 	$tableReportFood.attach($cbReportFood,0,1,1,2)
+	$tableReportFood.attach($buttonReportFood,0,1,2,3)
 	
 	$windowReportFood.add($tableReportFood)
 	$windowReportFood.show_all
 	
 	populateFoodReportComboBox($cbReportFood)
+	
+	$buttonReportFood.signal_connect("clicked") {createReportFood($cbReportFood.active_text.downcase)}
+	
 	
 end
 
@@ -382,15 +415,11 @@ def select_user_window(user_name)
 	$user_window.border_width = 10
 	$user_window.resizable=(false)
 	$user_window.modal=(true)
-	$user_window.set_size_request(300,-1)
-	$show_name = Gtk::Label.new("Name: #{user_name}")
+	$user_window.set_size_request(400,-1)
+	$show_name = Gtk::Label.new("Name: #{titleize(user_name)}")
 	$email_update_field = Gtk::Entry.new
-	$email_update_button = Gtk::Button.new("Update")
-	$email_update_button.signal_connect("clicked") {
-		update_email(user_name,$email_update_field.text)
-		confirmation_box("Email Updated")
-	}
-	$email_update_field.text = get_email(user_name)
+	$buttonUserEmailUpdate = Gtk::Button.new("Update Email")
+	$email_update_field.text = get_email(user_name.downcase)
 	$entry_food_new = Gtk::Entry.new
 	$entry_food_new.text = ""
 	$button_food_new_love = Gtk::Button.new("Love It!")
@@ -399,7 +428,7 @@ def select_user_window(user_name)
 	$cb_food = Gtk::ComboBox.new
 	$frame_rate = Gtk::Frame.new()
 	$hzLine = Gtk::HSeparator.new
-	$button_food_quit = Gtk::Button.new("Quit")
+	$buttonUserQuit = Gtk::Button.new("Quit")
 	$label_new_food = Gtk::Label.new("Enter New Food")
 	$label_rate_it = Gtk::Label.new("Rate It!")
 	$label_existing = Gtk::Label.new("Existing Food")
@@ -407,25 +436,29 @@ def select_user_window(user_name)
 	populateFoodReportComboBox($cb_food)
 	$cb_food.set_active(0)
 
-	$button_food_quit.signal_connect("clicked") {
+	$buttonUserEmailUpdate.signal_connect("clicked") {
+		update_email(user_name.downcase,$email_update_field.text.downcase)
+		confirmationBox("Email Updated")
+	}
+	$buttonUserQuit.signal_connect("clicked") {
 	$user_window.destroy
 	}
-
 	$button_food_new_love.signal_connect("clicked") {
 	GetFoodSelect($entry_food_new,$cb_food,get_user_id(user_name).to_i,3)
-	confirmation_box("Rating Set(Love It)")
+	confirmationBox("Rating Set(Love It)")
 	}
 	$button_food_new_ok.signal_connect("clicked") {
 	GetFoodSelect($entry_food_new,$cb_food,get_user_id(user_name).to_i,2)
-	confirmation_box("Rating Set(It's Ok)")
+	confirmationBox("Rating Set(It's Ok)")
 	}
 	$button_food_new_hate.signal_connect("clicked") {
 	GetFoodSelect($entry_food_new,$cb_food,get_user_id(user_name).to_i,1)
-	confirmation_box("Rating Set(Hate It)")
+	confirmationBox("Rating Set(Hate It)")
 	}
+
 	$user_window_table.attach($show_name,0,2,0,1)
 	$user_window_table.attach($email_update_field,0,1,1,2)
-	$user_window_table.attach($email_update_button,1,2,1,2)
+	$user_window_table.attach($buttonUserEmailUpdate,1,2,1,2)
 	$user_window_table.attach($label_new_food,0,1,3,4)
 	$user_window_table.attach($label_rate_it,1,2,3,4)
 	$user_window_table.attach($hzLine,0,2,2,3)
@@ -439,7 +472,7 @@ def select_user_window(user_name)
 	$user_vbox.pack_start($button_food_new_ok,false,false,0)
 	$user_vbox.pack_start($button_food_new_hate,false,false,0)
 	$user_window_table.attach($cb_food,0,1,6,7)
-	$user_window_table.attach($button_food_quit,0,2,8,9)
+	$user_window_table.attach($buttonUserQuit,0,2,8,9)
 	$user_window.add($user_window_table)
 	$user_window.show_all
 end
@@ -449,8 +482,14 @@ end
 # another_tab
 # Notes: Just a debug
 #############################################
-def another_tab; puts "Switching"; end
+#def another_tab; puts "Switching"; end
 
+#############################################
+# Setup()
+# Creates the main window and populates it
+# qwith notebook and all it's stuff
+#############################################
+def setup()
 window = Gtk::Window.new(Gtk::Window::TOPLEVEL)
 window.set_title  "WHAT2EAT?"
 window.border_width = 10
@@ -508,18 +547,19 @@ $buttonQuit.signal_connect("clicked"){Gtk.main_quit} #quits
 
 button_update.signal_connect( "clicked" ) {puts "TBI UPLOAD/DOWNLOAD FROM REMOTE"} #temp
 
-$nbMain.signal_connect('change-current-page') {	another_tab}
+$nbMain.signal_connect('change-current-page') {	#another_tab
+} #debug
 
-$buttonAddSelect.signal_connect("clicked") {select_user_window($cb.active_text)}
+$buttonAddSelect.signal_connect("clicked") {select_user_window($cb.active_text.downcase)}
 
-button_option.signal_connect("clicked"){about_box()}
+button_option.signal_connect("clicked"){aboutBox()}
 
 $buttonAddNewUser.signal_connect("clicked"){
 	if $userAddEntry.text.length == 0
 		puts "DEBUG: Nothing was entered"
 	else
-		add_user_to_local_db($cb,$userAddEntry,$emailAddEntry)
-		confirmation_box("New Person Successfuly Added")
+		addUserToLocalDB($cb,$userAddEntry,$emailAddEntry)
+		confirmationBox("New Person Successfuly Added")
 	end
 }
 
@@ -550,7 +590,13 @@ $tableMainMenu.attach($nbMain,0,1,1,2) #adds Notebook to main table
 ###################MAIN################################
 
 populate_user_select_cb($cb)
+
+
 window.add($tableMainMenu)
 window.show_all
 
+$nbMain.change_current_page(3) #this has to be done after show_all. You cannot change the page on the notebook until it's actually displayed.
+end
+
+setup()
 Gtk.main

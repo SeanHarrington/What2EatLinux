@@ -35,13 +35,15 @@ puts db.get_first_value 'SELECT SQLITE_VERSION()'
 #	end
 #$stm.close #close sql statement
  
+ db.execute "delete from USERS_FOODS"
+ db.execute "delete from USERS"
+ db.execute "delete from FOODS"
  
- 
-    $stm = db.prepare "SELECT user_id from USERS where name = 'Becca Harrington'" #prepare sql statement
-    rs = $stm.execute #fire the sql statement
-    row = rs.next
-    puts row
-    $stm.close #close sql statement
+#    $stm = db.prepare "SELECT * USERS where name = 'Becca Harrington'" #prepare sql statement
+#    rs = $stm.execute #fire the sql statement
+#    row = rs.next
+#    puts row
+#    $stm.close #close sql statement
  
  
  
