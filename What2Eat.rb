@@ -1,12 +1,192 @@
-#!/usr/bin/env rubyT
+#!/usr/bin/env ruby
 require 'gtk2'
 require 'sqlite3'
+require 'mysql'
+
 #############################################
 #What2Eat?                                  #
 #By Sean Harrington                         #
 #Project Start Date: Feb-7-2014             #
 #############################################
 
+
+###adds an email boolean validation to the string class.
+class String
+  def validateEmail
+    !self[/\A([^@\s]+)@((?:[-a-z0-9]+\.)+[a-z]{2,})\Z/i].nil?
+  end
+
+	def cleanUpMYSQL
+		self[0]= ""
+		self[0]= ""
+		self[self.length-1]=""
+		return self
+	end
+
+def cleanUpMYSQL2
+		self[0]= ""
+		self[0]= ""
+		self[self.length-1]=""
+		self[self.length-1]=""
+		return self
+	end
+end
+
+
+def first_time
+
+   $con = SQLite3::Database.open "what2eat"
+
+        $stm = $con.prepare "SELECT * from USERS" #prepare sql statement
+        rs = $stm.execute #fire the sql statement
+        row = rs.next
+		if row.nil?
+			puts "DEBUG: NO TABLES FOUND. CREATING TABLES"
+			$con.execute "CREATE TABLE USERS(user_id INTEGER PRIMARY KEY, name TEXT, email TEXT)"
+			$con.execute "CREATE TABLE FOODS(food_id INTEGER PRIMARY KEY, food_name TEXT)"
+			$con.execute "CREATE TABLE USERS_FOODS(user_food_id INTEGER PRIMARY KEY, user_id INTEGER, food_id INTEGER, rating INTEGER, old_rating INTEGER, updated INTEGER, avg_rating INTEGER, FOREIGN KEY(user_id) REFERENCES USERS(user_id), FOREIGN KEY (food_id) REFERENCES FOODS(food_id)  )"
+
+		else
+			puts "DEBUG: TABLES FOUND, PROCEEDING WITH GUI"
+		end
+        
+        $stm.close #close sql statement
+        $con.close
+ 
+
+end
+
+
+def update_remote_server()
+	
+	#only get those with an email and if their updated status is not 1
+	$temp_array = Array.new()
+	$email_array = Array.new()
+	$ret_array = Array.new()
+	$con = SQLite3::Database.open "what2eat"	
+	
+	$stm = $con.prepare "SELECT USERS.email, FOODS.food_name, USERS_FOODS.rating, USERS_FOODS.old_rating from USERS, FOODS, USERS_FOODS WHERE USERS.email != '' AND USERS_FOODS.food_id = FOODS.food_id AND USERS_FOODS.user_id = USERS.user_id AND USERS_FOODS.updated > 0" 
+	$rs = $stm.execute #fire the sql statement
+		$rs.each do |row|
+			$temp_array << row
+	puts "DEBUG: adding a new row of data for upload"		
+		end
+		$stm.close #close sql statement 
+	$con.execute "UPDATE USERS_FOODS SET updated = 0"
+	$con.execute "UPDATE USERS_FOODS SET old_rating = rating"
+	
+	$stm = $con.prepare "SELECT USERS.email from USERS where USERS.email != '' " 
+	$rs = $stm.execute #fire the sql statement
+		$rs.each do |row|
+			$email_array << row
+	
+		end
+		$stm.close #close sql statement 
+	
+	
+	
+	
+	rescue Mysql::Error => e
+		puts e.errno
+		puts e.error
+    
+	ensure
+		$con.close if $con
+	
+		
+	
+	##So far we have filled the array with stuff from the local DB that needs to be pushed.
+	#email, food, rating, old rating, updated?
+	
+	#now we need a loop that gets 5 values from the array
+		puts "connecting to remote server"
+	$remote = Mysql.new('54.186.174.138', 'sean', 'dragon', 'What2Eat')
+	puts "connected to remote"
+	$temp_array.each do |row|
+		$row = row.to_s.split(",")
+		$v_email = $row[0].cleanUpMYSQL
+		$v_food = $row[1].cleanUpMYSQL
+		$v_rating = $row[2]
+		$v_old_rating = $row[3]
+		$v_old_rating[$v_old_rating.length-1]=""
+		$v_movement = $v_rating.to_i - $v_old_rating.to_i
+		if $v_old_rating.to_i > 0
+			$v_voted = 0
+		else
+			$v_voted = 1
+		end
+		puts "starting packet upload"
+		puts $v_movement
+		$remote.query "CALL new_data('#{$v_email}','#{$v_food}',#{$v_movement},#{$v_voted})"
+		puts "upload finished"
+	end
+		
+		puts "out of Mysql loop"
+	###AT THIS POINT WE HAVE UPDATED THE REMOTE DB
+	
+	##NOW FOR THE SLOW PART
+	
+		
+	$email_array.each do |x|
+	x = x.to_s.cleanUpMYSQL2
+	
+	n = "nothing"
+	puts "returning a data packet from remote"
+    n = $remote.query ("SELECT tFunc('#{x}')")
+	puts "packet returned"
+    n_rows = n.num_rows
+    #puts n_rows
+    n_rows.times do
+			$ret_array << x
+			$ret_array << n.fetch_row 
+    end
+	end
+	
+	$remote.close
+	
+	i = 0
+	
+	
+	while i < $ret_array.length
+		name_line =  $ret_array[i]
+		
+		
+	
+		data_line =  $ret_array[i+1].to_s.cleanUpMYSQL2
+		data_line = data_line.split(";")
+		data_line.each do |y|
+			if y[0] != "~"
+			z = y.split(",")
+			
+			food_id = get_food_id(z[0])
+			avgr = z[1].to_i/z[2].to_i
+			name_id = get_user_id_by_email(name_line.to_s)
+			
+			puts "Updating: " + name_id.to_s + "," + food_id.to_s + "," + avgr.to_s
+			$con = SQLite3::Database.open "what2eat"	
+			$con.execute "UPDATE USERS_FOODS SET avg_rating = #{avgr} WHERE user_id = #{name_id} and food_id = #{food_id}"
+			$con.close
+			#user_food_id INTEGER PRIMARY KEY, user_id INTEGER, food_id INTEGER, rating INTEGER, old_rating INTEGER, updated INTEGER, avg_rating INTEGER
+			
+			end
+		end
+		i += 2
+	end
+	
+
+end
+
+def get_user_id_by_email(email)
+	$con = SQLite3::Database.open "what2eat"
+    $stm = $con.prepare "SELECT user_id from USERS where email = '#{email}'" #prepare sql statement
+    rs = $stm.execute #fire the sql statement
+    row = rs.next
+    $stm.close #close sql statement
+    $con.close
+    return row[0]
+
+
+end
 
 def get_sanitized_string(v)
   return v.to_s.gsub(/\\/, '\&\&').gsub(/'/, "''")
@@ -49,11 +229,16 @@ def createReportFood(food_name)
 
 	$con = SQLite3::Database.open "what2eat"
 	
-	$stm = $con.prepare "SELECT USERS.name, USERS_FOODS.rating from USERS, FOODS, USERS_FOODS WHERE FOODS.food_name = '#{get_sanitized_string(food_name.downcase)}' AND USERS_FOODS.food_id = FOODS.food_id AND USERS_FOODS.user_id = USERS.user_id ORDER BY USERS_FOODS.rating DESC, USERS.name ASC" 
+	$stm = $con.prepare "SELECT USERS.name, USERS_FOODS.rating, USERS_FOODS.avg_rating from USERS, FOODS, USERS_FOODS WHERE FOODS.food_name = '#{get_sanitized_string(food_name.downcase)}' AND USERS_FOODS.food_id = FOODS.food_id AND USERS_FOODS.user_id = USERS.user_id ORDER BY USERS_FOODS.rating DESC, USERS.name ASC" 
 	$rs = $stm.execute #fire the sql statement
 		$rs.each do |row|
 		$data1 = $data1 + titleize(row[0]) + "\n"
 		temp_string = ""
+		
+		if row[2] > 0
+		row[1] = row[2]
+		end
+		
 		if row[1] == 3
 			temp_string = "Loves It"
 		elsif row[1] == 2
@@ -61,6 +246,8 @@ def createReportFood(food_name)
 		else
 			temp_string = "Hates It"
 		end
+		
+		
 		$data2 = $data2 + temp_string + "\n"
 	  end
 	$stm.close #close sql statement
@@ -94,11 +281,16 @@ $data1 = ""
 $data2 = ""
 
 	$con = SQLite3::Database.open "what2eat"
-	$stm = $con.prepare "SELECT FOODS.food_name, USERS_FOODS.rating from FOODS, USERS_FOODS WHERE USERS_FOODS.food_id = FOODS.food_id AND USERS_FOODS.user_id = #{user_number} ORDER BY USERS_FOODS.rating DESC, FOODS.food_name ASC" 
+	$stm = $con.prepare "SELECT FOODS.food_name, USERS_FOODS.rating, USERS_FOODS.avg_rating from FOODS, USERS_FOODS WHERE USERS_FOODS.food_id = FOODS.food_id AND USERS_FOODS.user_id = #{user_number} ORDER BY USERS_FOODS.rating DESC, FOODS.food_name ASC" 
 	$rs = $stm.execute #fire the sql statement
 		$rs.each do |row|
 		$data1 = $data1 + titleize(row[0]) + "\n"
 		temp_string = ""
+		
+		if row[2] > 0
+		row[1] = row[2]
+		end
+		
 		if row[1] == 3
 			temp_string = "Loves It"
 		elsif row[1] == 2
@@ -158,7 +350,9 @@ def addUserToLocalDB(cb,userAddEntry,emailAddEntry)
     row = rs.next
 	$stm.close
 
-	if row.nil?
+	if !get_sanitized_string(emailAddEntry.text.downcase).validateEmail && get_sanitized_string(emailAddEntry.text.downcase) != ""
+		puts "bad email"
+	elsif row.nil?
 	$con.execute "INSERT INTO USERS(name,email) VALUES ('#{get_sanitized_string(userAddEntry.text.downcase)}','#{get_sanitized_string(emailAddEntry.text.downcase)}')"
     cb.append_text(titleize(userAddEntry.text))
     userAddEntry.text = ""
@@ -288,34 +482,31 @@ def add_food_to_local_db(food_name,user_id,rating)
     $con.close
 
 	if row.nil? #brand new
-	$con = SQLite3::Database.open "what2eat"
-    $con.execute "INSERT INTO FOODS(food_name) VALUES ('#{get_sanitized_string(food_name.downcase)}')"
-	$con.close
-	food_id = get_food_id(food_name).to_i
-    $con = SQLite3::Database.open "what2eat"
-	$con.execute "INSERT INTO USERS_FOODS(user_id,food_id,rating) VALUES (#{user_id},#{food_id},#{rating})"
-	$con.close
-	return true
+		$con = SQLite3::Database.open "what2eat"
+		$con.execute "INSERT INTO FOODS(food_name) VALUES ('#{get_sanitized_string(food_name.downcase)}')"
+		$con.close
+		food_id = get_food_id(food_name).to_i
+		$con = SQLite3::Database.open "what2eat"
+		$con.execute "INSERT INTO USERS_FOODS(user_id,food_id,rating,old_rating,updated,avg_rating) VALUES (#{user_id},#{food_id},#{rating},0,1,0)"
+		$con.close
+		return true
 
 	else #It exists in the foods table
 
-	food_id = get_food_id(food_name).to_i
-    $con = SQLite3::Database.open "what2eat"
-
-
-
-		$stm = $con.prepare "SELECT user_food_id from USERS_FOODS where food_id = #{food_id} AND user_id = #{user_id}" #prepare sql statement
+		food_id = get_food_id(food_name).to_i
+		$con = SQLite3::Database.open "what2eat"
+		$stm = $con.prepare "SELECT rating from USERS_FOODS where food_id = #{food_id} AND user_id = #{user_id}" #prepare sql statement
 		rs = $stm.execute #fire the sql statement
 		row = rs.next
 		$stm.close
-		if row.nil? #brand new
-		$con.execute "INSERT INTO USERS_FOODS(user_id,food_id,rating) VALUES (#{user_id},#{food_id},#{rating})"
-		else
-		$con.execute "UPDATE USERS_FOODS SET rating = #{rating} WHERE user_id = #{user_id} and food_id = #{food_id}"
-			
-		end
-		$con.close
 		
+		if row.nil? #brand new
+			$con.execute "INSERT INTO USERS_FOODS(user_id,food_id,rating,old_rating,updated,avg_rating) VALUES (#{user_id},#{food_id},#{rating},0,1,0)"
+		else
+			$con.execute "UPDATE USERS_FOODS SET rating = #{rating},old_rating = #{row[0]},updated = 1 WHERE user_id = #{user_id} and food_id = #{food_id}"
+		end
+		
+		$con.close
 		return false
 	end
 end
@@ -324,9 +515,13 @@ end
 # update_email(string,string)
 #############################################
 def update_email(user_name,email)
+	if get_sanitized_string(email.downcase).validateEmail
 	$con = SQLite3::Database.open "what2eat"
         $con.execute "UPDATE USERS SET email= '#{get_sanitized_string(email.downcase)}' WHERE name = '#{user_name}' "
 	$con.close
+	else
+	puts "invalid email"
+	end
 
 end
 #############################################
@@ -496,6 +691,7 @@ end
 # qwith notebook and all it's stuff
 #############################################
 def setup()
+first_time()
 window = Gtk::Window.new(Gtk::Window::TOPLEVEL)
 window.set_title  "WHAT2EAT?"
 window.border_width = 10
@@ -551,7 +747,7 @@ $buttonFoodReport.signal_connect("clicked"){foodReport()}
 
 $buttonQuit.signal_connect("clicked"){Gtk.main_quit} #quits
 
-button_update.signal_connect( "clicked" ) {puts "TBI UPLOAD/DOWNLOAD FROM REMOTE"} #temp
+button_update.signal_connect( "clicked" ) {update_remote_server()} #temp
 
 $nbMain.signal_connect('change-current-page') {	#another_tab
 } #debug

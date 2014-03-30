@@ -1,0 +1,74 @@
+
+DELIMITER //
+create PROCEDURE new_data ( IN v_email VARCHAR(50), IN v_food VARCHAR(50), IN v_movement int(2), IN v_votes int(1))
+BEGIN
+DECLARE  v_local_rating int(10);
+DECLARE v_local_votes int(10);
+DECLARE  v_test int(1);
+
+SELECT count(*) into v_test
+from USERS_DATA where EMAIL=v_email AND food = v_food;
+
+
+if v_test = 0 THEN 
+INSERT INTO USERS_DATA VALUES (v_email, v_food, v_movement, 1);
+
+
+else 
+
+SELECT sum_rating INTO v_local_rating FROM USERS_DATA WHERE email = V_email AND food = v_food;
+SELECT sum_votes INTO v_local_votes FROM USERS_DATA WHERE email = V_email AND food = v_food;
+
+SET v_local_rating = v_local_rating + v_movement; 
+SET v_local_votes = v_local_votes + v_votes; 
+
+UPDATE USERS_DATA SET SUM_RATING = v_local_rating, SUM_VOTES = v_local_votes WHERE email = v_email AND food = v_food;
+
+
+end if;
+
+END
+//
+DELIMITER ;
+
+
+
+
+
+
+drop function tFunc;
+
+DELIMITER $
+
+CREATE FUNCTION tFunc(v_email text)
+RETURNS text
+BEGIN
+DECLARE v_food text ;
+DECLARE v_local_food text;
+DECLARE v_local_rating int(10);
+DECLARE v_local_votes int(10);
+DECLARE v_finished INTEGER DEFAULT 0;
+
+DECLARE food_cursor CURSOR FOR 
+        SELECT food,sum_rating,sum_votes  FROM USERS_DATA WHERE email = v_email;
+
+DECLARE CONTINUE HANDLER 
+        FOR NOT FOUND SET v_finished = 1;
+set v_food = "~";
+OPEN food_cursor;
+ 
+    get_food: LOOP
+        FETCH food_cursor INTO v_local_food,v_local_rating,v_local_votes; 
+        IF v_finished = 1 THEN 
+            LEAVE get_food;
+        END IF;
+        
+        SET v_food = CONCAT(v_local_food,",",v_local_rating,",",v_local_votes,";",v_food);
+        END LOOP get_food;
+    CLOSE food_cursor;
+   
+    RETURN v_food;
+END;
+$
+
+DELIMITER ;

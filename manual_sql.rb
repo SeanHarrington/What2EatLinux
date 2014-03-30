@@ -16,7 +16,12 @@ puts db.get_first_value 'SELECT SQLITE_VERSION()'
 #db.execute "CREATE TABLE USERS(user_id INTEGER PRIMARY KEY, name TEXT, email TEXT)"
 #db.execute "CREATE TABLE FOODS(food_id INTEGER PRIMARY KEY, food_name TEXT)"
 #db.execute "CREATE TABLE USERS_FOODS(user_food_id INTEGER PRIMARY KEY, user_id INTEGER, food_id INTEGER, rating INTEGER, FOREIGN KEY(user_id) REFERENCES USERS(user_id), FOREIGN KEY (food_id) REFERENCES FOODS(food_id)  )"
+#db.execute "ALTER TABLE USERS_FOODS ADD COLUMN old_rating INTEGER"
+#db.execute "ALTER TABLE USERS_FOODS ADD COLUMN updated INTEGER"
+#db.execute "ALTER TABLE USERS_FOODS ADD COLUMN avg_rating INTEGER"
 #db.execute "DESCRIBE USERS"
+
+#db.execute "UPDATE USERS_FOODS SET updated = 0"
 
 #"SELECT USERS.name, FOODS.food_name, USERS_FOODS.rating FROM USERS, FOODS, USERS_FOODS WHERE USERS.user_id = USERS_FOODS.user_id AND USERS_FOODS.food_id = FOODS.food_id WHERE USERS.name = 'Sean Harrington'"
 
@@ -35,18 +40,31 @@ puts db.get_first_value 'SELECT SQLITE_VERSION()'
 #	end
 #$stm.close #close sql statement
  
- db.execute "delete from USERS_FOODS"
- db.execute "delete from USERS"
- db.execute "delete from FOODS"
+ #db.execute "delete from USERS_FOODS"
+ #db.execute "delete from USERS"
+ #db.execute "delete from FOODS"
  
 #    $stm = db.prepare "SELECT * USERS where name = 'Becca Harrington'" #prepare sql statement
 #    rs = $stm.execute #fire the sql statement
 #    row = rs.next
 #    puts row
 #    $stm.close #close sql statement
+#db.execute "DROP TABLE USERS_FOODS"
+#db.execute "CREATE TABLE USERS_FOODS(user_food_id INTEGER PRIMARY KEY, user_id INTEGER, food_id INTEGER, rating INTEGER, old_rating INTEGER, updated INTEGER, avg_rating INTEGER, FOREIGN KEY(user_id) REFERENCES USERS(user_id), FOREIGN KEY (food_id) REFERENCES FOODS(food_id)  )"
+
+#db.execute "UPDATE USERS_FOODS SET old_rating = 0"
+#db.execute "UPDATE USERS_FOODS SET avg_rating = 0"
+#db.execute "UPDATE USERS_FOODS SET updated = 1"
+#db.execute "UPDATE USERS_FOODS SET rating = 3 where food_id = 16"
  
- 
- 
+$stm = db.prepare "SELECT user_id, food_id, rating FROM USERS_FOODS" #prepare sql statement
+    $rs = $stm.execute #fire the sql statement
+    $rs.each do |row|##
+puts row
+puts ""
+end
+$stm.close #close sql statement 
+
 rescue SQLite3::Exception => e
 
 puts "Exception occured"
